@@ -80,10 +80,12 @@ void Player::update() {
 }
 
 void Player::shoot(float angle) {
+    
     // Reset velocities after shooting
     velG.reset();
     vel.reset();
 
+    
     // Add a force in the opposite direction of the shot
     Vector2D shotForce(-8.0 * cos(angle), 8.0 * sin(angle));
     force = force.add(shotForce);
@@ -119,7 +121,7 @@ void Bullet::update() {
 }
 
 void Bullet::render() {
-    LCD.FillCircle(pos.x, pos.y, 2);
+    LCD.FillCircle(pos.x, pos.y, radius);
 }
 
 Enemy::Enemy(float initialX, float initialY, float a) {
@@ -154,6 +156,7 @@ void Enemy::render() {
 Game::Game() {
     player.game = this;
     lastEnemySpawnTime = TimeNow();
+    gameOver = false;
 }
 
 Game::~Game() {
@@ -178,6 +181,7 @@ void Game::render() {
 }
 
 void Game::update() {
+
     // Update player object
     player.update();
 
@@ -252,8 +256,65 @@ void Game::update() {
     }
 }
 
+void Game::handleCollisions() {
+    // initialize variables to store player attributes
+    Vector2D p = player.getCenter();
+    float h = player.height/2.0, w = player.width/2.0;
+    // calculate radius of circle circumscribing player square
+    float r = sqrt(h*h + w*w);
+
+    // declare variables to store enemy attributes
+    Vector2D pE;
+    float hE, wE, rE;
+
+    // declare variables to store bullet attributes
+    Vector2D pB;
+    float rB;
+
+    // for each enemy
+    for (int i = 0; i < enemies.size(); i++) {
+        // initialize variables with enemy attributes
+        pE = enemies[i].getCenter();
+        hE = enemies[i].height/2.0; wE = enemies[i].width/2.0;
+        // calculate radius of circle circumscribing enemy square
+        rE = sqrt(hE*hE + wE*wE);
+
+        // if player and enemy objects are within their radii
+        if (p.sub(pE).magnitude() < r+rE) {
+            // if player and enemy objects intersect
+            if (p.y-h < pE.y+hE && p.y+h > pE.y-hE && p.x-w < pE.x+wE && p.x+w > pE.x-wE) {
+                // end game
+                gameOver = true;
+            }
+        }
+
+        
+        // for each bullet
+        for (int j = 0; j < bullets.size(); j++) {
+            // initialize variables with bullet attributes
+            pB = bullets[j].getCenter();
+            rB = bullets[j].radius;
+
+            // if enemy and bullet objects are within their radii
+            if (pE.sub(pB).magnitude() < rE+rB) {
+                // if enemy and bullet objects intersect
+                if (pB.y-rB < pE.y+hE && pB.y+rB > pE.y-hE && pB.x-rB < pE.x+wE && pB.x+rB > pE.x-wE) {
+                    // remove bullet and enemy
+                    bullets.erase(bullets.begin() + j, bullets.begin() + j + 1);
+                    j--;
+                    enemies.erase(enemies.begin() + i, enemies.begin() + i + 1);
+                    i--;
+                }
+            }
+        }
+        
+    }
+
+
+}
+
 bool Game::hasEnded() {
-    return player.pos.x <= 0 || player.pos.x >= WINDOW_WIDTH - player.width || player.pos.y <= 0 || player.pos.y >= WINDOW_HEIGHT - player.height;
+    return gameOver || player.pos.x <= 0 || player.pos.x >= WINDOW_WIDTH - player.width || player.pos.y <= 0 || player.pos.y >= WINDOW_HEIGHT - player.height;
 }
 
 Vector2D::Vector2D() {
@@ -309,10 +370,11 @@ void Play(){
     // Alias/Reference to game's player object
     Player &player = game.player;
 
+    // Render game
+    game.render();
+
     // Keep running the game loop if the game has not ended
     while(!game.hasEnded()){
-        // Render game
-        game.render();
 
         // On click
         if(LCD.Touch(&x, &y) && !pressed) {
@@ -333,6 +395,12 @@ void Play(){
 
         // Update game
         game.update();
+
+        // Render game
+        game.render();
+
+        // Handle collisions
+        game.handleCollisions();
     }
 }
 
